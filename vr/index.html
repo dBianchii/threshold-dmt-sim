@@ -1,0 +1,1565 @@
+<!doctype html>
+<html lang="en" class="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Threshold VR</title>
+<meta name="description" content="Threshold in VR: a first-person DMT experience in stereo 3D with head tracking. WebXR, runs in the Quest browser. One HTML file, no assets.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://threshold-dmt-sim.vercel.app/vr/">
+<meta property="og:title" content="Threshold VR: a DMT experience in your headset">
+<meta property="og:description" content="First-person DMT simulation in stereo 3D with head tracking. Open in the Quest browser and press Enter VR.">
+<meta property="og:image" content="https://threshold-dmt-sim.vercel.app/og-room.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Threshold VR: a DMT experience in your headset">
+<meta name="twitter:description" content="First-person DMT simulation in stereo 3D with head tracking. Open in the Quest browser and press Enter VR.">
+<meta name="twitter:image" content="https://threshold-dmt-sim.vercel.app/og-room.jpg">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: fixed; inset: 0; overflow: hidden; background: #000; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: #e9e4dc; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #000; touch-action: none; cursor: grab; }
+  canvas.drag { cursor: grabbing; }
+  #cap { position: absolute; left: 0; right: 0; bottom: 74px; text-align: center; padding: 0 24px; font-size: 15px; letter-spacing: .04em; line-height: 1.5; color: rgba(255,250,240,.86); text-shadow: 0 1px 12px #000, 0 0 2px #000; opacity: 0; transition: opacity 1.2s; pointer-events: none; }
+  #cap.on { opacity: 1; }
+  #hud { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 18px 14px; display: flex; align-items: center; gap: 12px; background: linear-gradient(transparent, rgba(0,0,0,.72)); transition: opacity .5s; font-size: 12px; }
+  #hud.hide { opacity: 0; pointer-events: none; }
+  button { font: inherit; color: inherit; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); border-radius: 6px; padding: 6px 10px; cursor: pointer; min-width: 34px; }
+  button:hover { background: rgba(255,255,255,.16); }
+  button:focus-visible { outline: 2px solid #9ad; outline-offset: 2px; }
+  button.off { opacity: .45; }
+  [hidden] { display: none !important; }
+  #bar { position: relative; flex: 1; height: 22px; cursor: pointer; }
+  #bar::before { content: ""; position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: rgba(255,255,255,.2); }
+  #fill { position: absolute; left: 0; top: 10px; height: 2px; background: #f0d9b0; width: 0; }
+  .tick { position: absolute; top: 7px; width: 1px; height: 8px; background: rgba(255,255,255,.4); }
+  #phase { min-width: 118px; font-variant-caps: all-small-caps; letter-spacing: .12em; font-size: 13px; }
+  #clock { min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; opacity: .8; }
+  #start { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 40%, rgba(40,22,60,.82), rgba(0,0,0,.96)); z-index: 5; padding: 16px; overflow: auto; }
+  #start.gone { display: none; }
+  #card { max-width: 540px; text-align: center; }
+  #card h1 { font-weight: 300; letter-spacing: .5em; text-indent: .5em; font-size: clamp(26px, 6vw, 44px); margin: 0 0 6px; }
+  #card h2 { font-weight: 400; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: .7; margin: 0 0 16px; }
+  #card p { font-size: 13px; line-height: 1.55; opacity: .78; margin: 0 0 10px; text-wrap: pretty; }
+  #card .warn { color: #ffcf9a; opacity: .95; }
+  #card a { color: #f0d9b0; }
+  .big { margin: 6px 5px 0; padding: 10px 26px; font-size: 14px; letter-spacing: .2em; text-transform: uppercase; }
+  #govr { background: rgba(240,217,176,.2); border-color: rgba(240,217,176,.7); }
+  #go { background: rgba(240,217,176,.08); border-color: rgba(240,217,176,.35); }
+  #keys { margin-top: 12px; font-size: 11.5px; opacity: .5; letter-spacing: .06em; line-height: 1.6; }
+  #err { position: absolute; left: 8px; top: 8px; right: 8px; color: #f88; font: 12px ui-monospace, monospace; white-space: pre-wrap; z-index: 9; margin: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+<canvas id="c"></canvas>
+<div id="cap"></div>
+<div id="hud">
+  <button id="play" aria-label="Play or pause">❚❚</button>
+  <span id="phase">Setting</span>
+  <div id="bar" role="slider" aria-label="Timeline" tabindex="0"><div id="fill"></div></div>
+  <span id="clock">T+ 0:00</span>
+  <button id="vr" aria-label="Enter VR" hidden>VR</button>
+  <button id="cc" aria-label="Toggle captions">CC</button>
+  <button id="mute" aria-label="Toggle sound">♪</button>
+  <button id="fs" aria-label="Fullscreen">⛶</button>
+</div>
+<div id="start">
+  <div id="card">
+    <h1>THRESHOLD</h1>
+    <h2>VR · a DMT experience, start to finish</h2>
+    <p>The whole trip in stereo 3D with head tracking. Look around the room, watch your hands bring the pipe up, then lie back. The chrysanthemum, the tunnel, hyperspace and the entities surround you in every direction. About five minutes.</p>
+    <p class="warn">Contains intense flashing, strobing colour and fast motion, and VR makes it stronger: the room tilts when you lie back and you fly through a tunnel. Do not watch if you are photosensitive or prone to seizures. Sit or lie down, and take the headset off if you feel unwell.</p>
+    <button id="govr" class="big" hidden>Enter VR</button>
+    <button id="go" class="big">Watch here</button>
+    <p id="xrnote" style="margin-top:14px"></p>
+    <div id="keys">In VR: trigger or pinch pauses · grip recentres · thumbstick skips<br>Here: drag to look around · space play/pause · ←/→ seek · R recentre · F fullscreen · M sound · C captions<br><a href="../">Flat-screen version</a></div>
+  </div>
+</div>
+<pre id="err"></pre>
+</div>
+
+<script id="fs-scene" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+precision highp sampler2D;
+out vec4 O;
+uniform vec2 uRes,uCen;
+uniform float uT,uFov,uFlat;
+uniform sampler2D uPrev;
+uniform vec4 uProj;
+uniform vec3 uEye,uTP,uHO;
+uniform mat3 uVR,uTR,uHB;
+uniform int uQM,uQS,uQH,uQA;
+uniform float uQE;
+uniform vec3 uPM,uPB,uLP;
+uniform float uHands,uFlame,uVapor,uExA,uExP,uInh,uResin;
+uniform float uI,uLid,uTripW,uChrys,uChrysK,uTun,uTunZ,uTunK,uHyp,uEnt,uPeak,uFlash,uTrail,uFbZoom;
+
+#define PI 3.14159265
+#define TAU 6.2831853
+const vec3 AL=vec3(.3271,-.9346,-.1402);
+const vec3 LAMP=vec3(1.7,1.52,-2.3);
+vec3 ro;vec2 gUV;
+bool gNoGlass=false,gShadow=false;
+
+mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+float hash11(float p){p=fract(p*.1031);p*=p+33.33;p*=p+p;return fract(p);}
+float hash21(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x),mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*noise(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return s;}
+vec3 pal(float t,vec3 a,vec3 b,vec3 c,vec3 d){return a+b*cos(TAU*(c*t+d));}
+vec3 neon(float t){return pal(t,vec3(.5),vec3(.5),vec3(1.),vec3(0.,.33,.67));}
+
+float sdBox(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.);}
+float sdRBox(vec3 p,vec3 b,float r){vec3 q=abs(p)-b+r;return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.)-r;}
+float sdCapsule(vec3 p,vec3 a,vec3 b,float r){vec3 pa=p-a,ba=b-a;float h=clamp(dot(pa,ba)/dot(ba,ba),0.,1.);return length(pa-ba*h)-r;}
+float sdTaper(vec3 p,vec3 a,vec3 b,float ra,float rb){vec3 pa=p-a,ba=b-a;float h=clamp(dot(pa,ba)/dot(ba,ba),0.,1.);return length(pa-ba*h)-mix(ra,rb,h);}
+float sdEll(vec3 p,vec3 r){float k0=length(p/r);float k1=length(p/(r*r));return k0*(k0-1.)/k1;}
+float sdCyl(vec3 p,float r,float h){vec2 d=abs(vec2(length(p.xz),p.y))-vec2(r,h);return min(max(d.x,d.y),0.)+length(max(d,0.));}
+float smin(float a,float b,float k){float h=max(k-abs(a-b),0.)/k;return min(a,b)-h*h*k*.25;}
+vec2 U(vec2 a,vec2 b){return a.x<b.x?a:b;}
+
+// world -> body frame (x right, y up, z forward). hands and pipe live here.
+vec3 toCam(vec3 p){return (p-uHO)*uHB;}
+
+// ---------- iridescent filigree used for open-eye overlays ----------
+vec3 lace(vec2 u,float t){
+  u=fract(u*.5)*2.-1.;
+  vec3 c=vec3(0.);float s=1.;
+  for(int i=0;i<4;i++){
+    float fi=float(i);
+    u=abs(u)-.42-.08*sin(t*.23+fi*1.7);
+    u*=rot(.785+.25*sin(t*.11+fi));
+    u*=1.45;s*=1.45;
+    float d=min(abs(u.x),abs(u.y))/s;
+    float r=abs(length(u)-.5)/s;
+    c+=neon(fi*.23+t*.09+length(u)*.25)*(smoothstep(.02,0.,d)+.6*smoothstep(.016,0.,r))/(1.+fi*.4);
+  }
+  return c;
+}
+
+// ---------- hands ----------
+float gNail=0.;bool gAux=false;
+float sdFinger(vec3 h,float x,float y0,vec3 L,vec3 A,float r){
+  vec3 p0=vec3(x,y0,-.002);
+  vec3 d1=vec3(0.,cos(A.x),-sin(A.x)),d2=vec3(0.,cos(A.y),-sin(A.y)),d3=vec3(0.,cos(A.z),-sin(A.z));
+  vec3 p1=p0+L.x*d1,p2=p1+L.y*d2,p3=p2+L.z*d3;
+  float d=sdTaper(h,p0,p1,r*1.1,r);
+  d=smin(d,sdTaper(h,p1,p2,r,r*.92),.003);
+  d=smin(d,sdTaper(h,p2,p3,r*.92,r*.8),.003);
+  d=smin(d,length(h-vec3(x,y0,.004))-r*1.12,.006);
+  if(gAux){
+    vec3 pa=h-p2;float hh=clamp(dot(pa,d3)/L.z,0.,1.);
+    vec3 v=pa-d3*L.z*hh;float lv=length(v);
+    gNail=max(gNail,smoothstep(.4,.52,hh)*smoothstep(.55,.78,dot(v/max(lv,1e-5),vec3(0.,sin(A.z),cos(A.z))))*step(lv,r*1.15));
+  }
+  return d;
+}
+float sdThumb(vec3 h,vec3 a,vec3 b,vec3 c,vec3 e){
+  float d=sdTaper(h,a,b,.0138,.0118);
+  d=smin(d,sdTaper(h,b,c,.0116,.0102),.004);
+  d=smin(d,sdTaper(h,c,e,.0102,.0086),.003);
+  if(gAux){
+    vec3 ax=normalize(e-c);vec3 pa=h-c;float L=length(e-c);float hh=clamp(dot(pa,ax)/L,0.,1.);
+    vec3 v=pa-ax*L*hh;float lv=length(v);
+    vec3 dn=normalize(cross(ax,cross(vec3(0.,0.,1.),ax))+vec3(.5,0.,0.));
+    gNail=max(gNail,smoothstep(.4,.52,hh)*smoothstep(.5,.75,dot(v/max(lv,1e-5),dn))*step(lv,.0115));
+  }
+  return d;
+}
+// anatomical hand, origin at wrist. x thumb side, y toward fingers, z back of hand.
+// pose 0: pinch on a thin rod along x at (y .117, z -.067). pose 1: fist round a lighter.
+float sdHand(vec3 h,int pose,vec3 elbow,out float sleeve){
+  float bd=length(h-vec3(0.,.065,-.03))-.125;
+  float d=1e3;
+  if(bd<.03){
+    if(pose==0){
+      d=sdFinger(h,.028,.090,vec3(.045,.026,.022),vec3(.52,1.31,1.83),.0088);
+      d=smin(d,sdFinger(h,.009,.093,vec3(.05,.03,.023),vec3(.61,1.45,2.),.009),.0025);
+      d=smin(d,sdFinger(h,-.010,.088,vec3(.046,.028,.022),vec3(.52,1.31,1.83),.0086),.0025);
+      d=smin(d,sdFinger(h,-.028,.080,vec3(.036,.021,.019),vec3(.35,.96,1.4),.0076),.0025);
+      d=smin(d,sdThumb(h,vec3(.034,.02,-.012),vec3(.049,.047,-.042),vec3(.043,.076,-.058),vec3(.030,.1012,-.066)),.004);
+    }else{
+      d=sdFinger(h,.028,.090,vec3(.045,.026,.022),vec3(.96,2.44,3.49),.0088);
+      d=smin(d,sdFinger(h,.009,.093,vec3(.05,.03,.023),vec3(1.01,2.53,3.58),.009),.0025);
+      d=smin(d,sdFinger(h,-.010,.088,vec3(.046,.028,.022),vec3(1.05,2.58,3.63),.0086),.0025);
+      d=smin(d,sdFinger(h,-.028,.080,vec3(.036,.021,.019),vec3(1.08,2.62,3.67),.0076),.0025);
+      d=smin(d,sdThumb(h,vec3(.034,.02,-.012),vec3(.058,.045,-.02),vec3(.066,.073,-.016),vec3(.058,.095,-.012)),.004);
+    }
+    float palm=sdRBox(h-vec3(0.,.045,0.),vec3(.041,.047,.0125),.012);
+    palm=smin(palm,sdEll(h-vec3(.03,.028,-.012),vec3(.019,.03,.014)),.012);
+    d=smin(d,palm,.008);
+  }else d=bd+.02;
+  float arm=sdTaper(h,vec3(0.,.004,0.),elbow,.026,.043);
+  d=smin(d,arm,.02);
+  vec3 dir=normalize(elbow);
+  sleeve=sdTaper(h,dir*.05,elbow,.034,.052);
+  return d;
+}
+mat3 handR(){
+  vec3 X=-AL;vec3 y0=vec3(-.25,0.,.97);vec3 Y=normalize(y0-X*dot(y0,X));
+  return mat3(X,Y,cross(X,Y));
+}
+const vec3 GL_=vec3(.012,.096,-.029);
+
+vec2 mapHands(vec3 q){
+  float bd=length(q-vec3(0.,-.35,.3))-.82;
+  if(bd>.1)return vec2(bd,0.);
+  vec2 r=vec2(1e3,0.);
+  vec3 a=normalize(uPB-uPM);
+  if(!gNoGlass){
+    float g=smin(sdCapsule(q,uPM,uPB,.0072),length(q-uPB)-.027,.012);
+    r=U(r,vec2(g,9.));
+  }
+  vec3 rp=q-(uPB+vec3(0.,-.0185,0.));
+  r=U(r,vec2((length(rp*vec3(1.,2.4,1.))-.012*uResin)*.45,17.));
+  // left hand pinching the stem
+  vec3 P=mix(uPM,uPB,.3);
+  vec3 EL=vec3(-.5,-.6,.2);
+  vec3 X=a;vec3 Y=normalize((P-EL)-X*dot(P-EL,X));
+  mat3 HF=mat3(X,Y,cross(Y,X));
+  vec3 off=vec3(0.,.117,-.067);
+  float sl;float dh=sdHand((q-P)*HF+off,0,(EL-P)*HF+off,sl);
+  r=U(r,vec2(dh,7.));r=U(r,vec2(sl,8.));
+  // lighter in right fist
+  mat3 RF=handR();
+  vec3 ER=vec3(.36,-.74,.1);
+  vec3 hr=(q-uLP)*RF+GL_;
+  vec3 lb=hr-GL_;
+  float body=sdRBox(lb,vec3(.037,.009,.0135),.004);
+  float noz=sdCapsule(lb,vec3(.037,0.,0.),vec3(.047,0.,0.),.0058);
+  r=U(r,vec2(min(body,noz),lb.x>.031?10.5:10.));
+  float sr;float dr=sdHand(hr,1,(ER-uLP)*RF+GL_,sr);
+  r=U(r,vec2(dr,7.));r=U(r,vec2(sr,8.));
+  return r;
+}
+
+// ---------- room ----------
+vec2 mapRoom(vec3 p){
+  vec2 r=vec2(p.y,1.);
+  r=U(r,vec2(2.6-p.y,3.));
+  r=U(r,vec2(min(min(2.2-abs(p.x),p.z+3.),2.5-p.z),2.));
+  r=U(r,vec2(sdRBox(p-vec3(0.,.24,1.62),vec3(1.05,.26,.86),.09),4.));
+  r=U(r,vec2(sdEll(p-vec3(0.,.56,2.12),vec3(.62,.1,.25)),4.5));
+  r=U(r,vec2(sdRBox(p-vec3(.7,.36,-2.7),vec3(.85,.36,.26),.012),11.));
+  r=U(r,vec2(sdEll(p-vec3(.12,.85,-2.68),vec3(.08,.13,.08)),14.));
+  r=U(r,vec2(sdCyl(p-vec3(1.25,.81,-2.7),.075,.09),12.));
+  vec3 fp=p-vec3(1.25,1.12,-2.7);
+  float fol=length(fp*vec3(1.,.85,1.))-.2+.045*sin(fp.x*22.)*sin(fp.y*19.+1.)*sin(fp.z*21.);
+  r=U(r,vec2(fol*.7,15.));
+  r=U(r,vec2(sdBox(p-vec3(.55,.76,-2.68),vec3(.14,.04,.1)),13.5));
+  r=U(r,vec2(sdBox(p-vec3(-2.03,.95,-1.5),vec3(.17,.95,.55)),13.));
+  vec3 c=p-vec3(-1.2,1.5,-2.94);c.x=abs(c.x)-.72;
+  float cur=sdBox(c,vec3(.17,.9,.012))-.02*(.5+.5*sin(p.x*48.));
+  r=U(r,vec2(cur*.8,18.));
+  r=U(r,vec2(sdEll(p-vec3(0.,2.6,1.2),vec3(.2,.07,.2)),16.));
+  if(!gShadow){
+    r=U(r,vec2(sdCapsule(p,vec3(1.7,.02,-2.3),vec3(1.7,1.38,-2.3),.013),12.5));
+    r=U(r,vec2(sdCyl(p-vec3(1.7,.015,-2.3),.14,.015),12.5));
+    r=U(r,vec2(sdCyl(p-vec3(1.7,1.52,-2.3),.19,.15),5.));
+  }
+  return r;
+}
+
+vec2 map(vec3 p){
+  vec2 r=mapRoom(p);
+  if(uHands>.5&&!gShadow)r=U(r,mapHands(toCam(p)));
+  return r;
+}
+vec3 calcN(vec3 p){
+  const vec2 k=vec2(1.,-1.);const float h=.0004;
+  return normalize(k.xyy*map(p+k.xyy*h).x+k.yyx*map(p+k.yyx*h).x+k.yxy*map(p+k.yxy*h).x+k.xxx*map(p+k.xxx*h).x);
+}
+float march(vec3 rd,out float m){
+  float t=.025;m=2.;
+  for(int i=0;i<uQM;i++){
+    vec2 h=map(ro+rd*t);
+    if(h.x<.0004*t+.00012){m=h.y;return t;}
+    t+=h.x*.9;
+    if(t>14.)break;
+  }
+  return t;
+}
+float shadow(vec3 p,vec3 l,float maxd){
+  gShadow=true;float res=1.,t=.03;
+  for(int i=0;i<uQS;i++){
+    float h=mapRoom(p+l*t).x;
+    res=min(res,10.*h/t);
+    t+=clamp(h,.03,.3);
+    if(res<.01||t>maxd)break;
+  }
+  gShadow=false;return clamp(res,0.,1.);
+}
+float aoc(vec3 p,vec3 n){
+  float o=0.,s=1.;
+  for(int i=1;i<=4;i++){float h=.04*float(i);o+=(h-map(p+n*h).x)*s;s*=.6;}
+  return clamp(1.-2.5*o,0.,1.);
+}
+
+vec3 rug(vec2 u){
+  u+=uI*.04*sin(u.yx*7.+uT*.8);
+  vec2 a=abs(u);float b=max(a.x,a.y);
+  vec3 red=vec3(.42,.07,.06),navy=vec3(.06,.08,.2),cream=vec3(.65,.56,.4),och=vec3(.6,.38,.1);
+  vec3 c=red;
+  vec2 g=u*vec2(6.,8.);vec2 f=abs(fract(g)-.5);float dm=f.x+f.y;
+  c=mix(c,navy,smoothstep(.27,.25,dm));
+  c=mix(c,och,smoothstep(.1,.08,dm));
+  float md=a.x*1.2+a.y;
+  c=mix(c,navy,smoothstep(.5,.48,md));
+  c=mix(c,cream,smoothstep(.4,.38,md));
+  c=mix(c,red,smoothstep(.32,.3,md));
+  c=mix(c,och,smoothstep(.12,.1,md));
+  c=mix(c,navy,smoothstep(.82,.84,b));
+  c=mix(c,cream,smoothstep(.88,.89,b)*smoothstep(.93,.92,b));
+  return c*(.8+.4*noise(u*120.));
+}
+vec3 tapestry(vec2 u){
+  float r=length(u),a=atan(u.y,u.x);
+  a+=uI*.5*sin(r*5.-uT*.5);
+  r+=uI*.03*sin(a*8.+uT);
+  vec3 ind=vec3(.07,.07,.22),och=vec3(.62,.42,.12),crm=vec3(.5,.08,.1),cm=vec3(.7,.62,.48),teal=vec3(.05,.3,.3);
+  vec3 c=ind;
+  float pet=cos(a*8.)*.5+.5;
+  c=mix(c,teal,smoothstep(.02,0.,r-.56-.1*(cos(a*16.)*.5+.5)));
+  c=mix(c,crm,smoothstep(.02,0.,r-.3-.14*pet));
+  c=mix(c,och,smoothstep(.02,0.,r-.18-.07*(cos(a*16.)*.5+.5)));
+  c=mix(c,ind,smoothstep(.012,0.,r-.1));
+  c=mix(c,cm,smoothstep(.01,0.,r-.04));
+  c=mix(c,cm,smoothstep(.012,0.,abs(r-.47-.05*cos(a*8.))-.006));
+  c=mix(c,och,smoothstep(.012,0.,abs(r-.7-.04*cos(a*24.))-.008));
+  c=mix(c,crm,smoothstep(.01,0.,abs(r-.86)-.03)*step(.5,fract(a*32./TAU)));
+  vec2 b=abs(u);float bd=max(b.x,b.y);
+  c=mix(c,och,smoothstep(.92,.93,bd)*smoothstep(.98,.97,bd));
+  return c*(.75+.35*noise(u*90.));
+}
+
+vec3 shadeHit(vec3 p,vec3 rd,float m){
+  vec3 n=calcN(p);
+  vec3 q=toCam(p);
+  vec3 alb=vec3(.5),emi=vec3(0.);
+  float spec=.04,gloss=12.;
+  vec3 an=abs(n);
+  vec2 su=an.y>.5?p.xz:(an.z>.5?p.xy:p.zy);
+  bool hand=(m>6.5&&m<10.9)||(m>16.5&&m<17.5);
+  if(m<1.5){
+    vec2 pl=vec2(p.x/.14,p.z/1.1);float row=floor(pl.x);pl.y+=hash11(row)*3.;
+    float h=hash21(vec2(row,floor(pl.y)));
+    alb=mix(vec3(.3,.19,.11),vec3(.42,.28,.17),h);
+    alb*=.8+.35*fbm(vec2(p.x*40.,p.z*3.)+h*10.);
+    float gx=min(fract(pl.x),1.-fract(pl.x));
+    alb*=mix(.55,1.,smoothstep(0.,.04,gx));
+    spec=.3;gloss=40.;
+    vec2 rg=(p.xz-vec2(0.,-1.05))/vec2(1.25,1.35);
+    if(max(abs(rg.x),abs(rg.y))<1.){alb=rug(rg);spec=0.;}
+  }else if(m<2.5){
+    alb=vec3(.66,.62,.56)*(.95+.08*noise(su*40.));
+    if(p.y<.09)alb=vec3(.8,.78,.74);
+    if(p.z<-2.98){
+      vec2 w=(p.xy-vec2(-1.2,1.5))/vec2(.55,.62);
+      if(max(abs(w.x),abs(w.y))<1.){
+        vec3 sky=mix(vec3(.012,.02,.05),vec3(.035,.05,.11),w.y*.5+.5);
+        sky+=vec3(.9,.9,.8)*smoothstep(.13,.1,length((w-vec2(.42,.5))*vec2(.9,1.)))*.9;
+        sky+=vec3(.2,.22,.3)*exp(-length(w-vec2(.42,.5))*3.)*.25;
+        vec2 cg=w*vec2(11.,9.);vec2 ci=floor(cg);
+        float lh=hash21(ci);
+        if(w.y<-.25+.25*hash11(ci.x*3.1))sky=mix(vec3(.01,.012,.02),mix(vec3(1.,.7,.3),vec3(.6,.8,1.),hash11(lh*9.))*.7,step(.72,lh)*smoothstep(.45,.2,length(fract(cg)-.5)));
+        emi=sky;alb=vec3(0.);spec=.3;gloss=80.;
+        float fr=min(1.-abs(w.x),1.-abs(w.y));
+        if(fr<.07||abs(w.x)<.035||abs(w.y)<.03){alb=vec3(.72,.7,.66);emi=vec3(0.);}
+      }
+      vec2 tp=(p.xy-vec2(.72,1.72))/.6;
+      if(abs(tp.x)<1.&&abs(tp.y)<1.)alb=tapestry(tp);
+    }
+  }else if(m<3.5){
+    alb=vec3(.74,.72,.68)*(.9+.12*noise(p.xz*36.));
+  }else if(m<4.2){
+    alb=vec3(.14,.2,.25)*(.8+.3*noise(p.xz*90.)+.15*sin(p.x*9.+sin(p.z*5.)));
+  }else if(m<4.8){
+    alb=vec3(.6,.58,.54);
+  }else if(m<5.5){
+    emi=vec3(1.,.6,.26)*2.4*(.75+.25*smoothstep(1.37,1.6,p.y));alb=vec3(0.);
+  }else if(m<7.5){
+    gAux=true;gNail=0.;mapHands(q);gAux=false;
+    alb=vec3(.74,.5,.39)*(.93+.12*noise(q.xy*260.)+.05*noise(q.xy*60.));
+    spec=.1;gloss=16.;
+    if(gNail>.01){alb=mix(alb,vec3(.82,.6,.55),gNail);spec=mix(spec,.7,gNail);gloss=mix(gloss,60.,gNail);}
+  }else if(m<8.5){
+    alb=vec3(.07,.075,.09)*(.75+.35*noise(q.xy*500.));
+  }else if(m<10.2){
+    alb=vec3(.62,.06,.05);spec=.9;gloss=70.;
+  }else if(m<10.8){
+    alb=vec3(.5,.5,.52);spec=1.2;gloss=50.;
+  }else if(m<11.5){
+    alb=vec3(.27,.16,.09)*(.75+.5*fbm(vec2(p.x*4.,p.y*50.)));
+    if(n.z>.5){
+      float gy=abs(fract(p.y/.24)-.5);
+      alb*=mix(.35,1.,smoothstep(.47,.455,gy));
+      vec2 kn=vec2((fract((p.x+.15)/.85)-.5)*.85,(fract(p.y/.24)-.5)*.24);
+      if(length(kn)<.016){alb=vec3(.7,.55,.25);spec=.8;gloss=40.;}
+    }
+    spec+=.15;gloss=30.;
+  }else if(m<12.2){
+    alb=vec3(.5,.24,.14);
+  }else if(m<12.8){
+    alb=vec3(.05);spec=.5;gloss=40.;
+  }else if(m<13.2){
+    alb=vec3(.2,.12,.07);
+    if(n.x>.5){
+      float sy=fract(p.y/.38);float rw=floor(p.y/.38);
+      float bz=floor(p.z*30.);float bh=.5+.4*hash11(bz+rw*7.);
+      if(sy>.07){
+        if(sy-.07<bh*.9)alb=pal(hash11(bz*1.7+rw*3.),vec3(.35,.28,.25),vec3(.25,.2,.2),vec3(1.),vec3(0.,.15,.3))*(.6+.4*step(.08,fract(p.z*30.)));
+        else alb=vec3(.03);
+      }
+    }
+  }else if(m<13.8){
+    alb=mix(vec3(.5,.14,.1),vec3(.15,.25,.4),step(.76,p.y));
+  }else if(m<14.5){
+    emi=vec3(1.,.4,.1)*(.9+.6*noise(p.xy*40.));alb=vec3(.3,.1,.03);
+  }else if(m<15.5){
+    alb=vec3(.07,.22,.07)*(.6+.8*noise(p.xy*30.));
+  }else if(m<16.5){
+    alb=vec3(.8,.8,.78);spec=.5;gloss=30.;
+  }else if(m<17.5){
+    alb=mix(vec3(.75,.5,.18),vec3(.92,.86,.62),uResin);emi=vec3(.9,.5,.15)*.25*uFlame;spec=.6;gloss=30.;
+  }else{
+    alb=vec3(.46,.3,.15)*(.55+.45*sin(p.x*48.));
+  }
+
+  vec3 L=LAMP-p;float dl=length(L);L/=dl;
+  float cone=mix(.42,1.,smoothstep(.5,.78,abs(L.y)));
+  float sh=1.;
+  if(!hand&&m>.5&&(m<4.9||m>5.5))sh=shadow(p+n*.012,L,dl-.26);
+  float ndl=max(dot(n,L),0.);
+  vec3 lc=vec3(1.,.66,.36)*2.3/(.6+dl*dl)*cone;
+  vec3 col=alb*lc*ndl*sh;
+  vec3 hv=normalize(L-rd);
+  col+=lc*spec*pow(max(dot(n,hv),0.),gloss)*sh*ndl;
+  vec3 S=vec3(.12,.9,-2.6)-p;float ds=length(S);S/=ds;
+  col+=alb*vec3(1.,.4,.12)*.2/(.08+ds*ds)*max(dot(n,S),0.);
+  vec3 Wd=vec3(-1.2,1.5,-2.8)-p;float dw=length(Wd);Wd/=dw;
+  col+=alb*vec3(.3,.42,.7)*.3/(.5+dw*dw)*max(dot(n,Wd),0.);
+  // soft bounce fill from behind the viewer
+  col+=alb*vec3(.9,.72,.55)*.055*max(dot(n,normalize(vec3(-.35,.45,.82))),0.);
+  float o=aoc(p,n);
+  if(m>6.5&&m<7.5)alb=mix(alb*vec3(.78,.5,.46),alb,smoothstep(.35,.95,o));
+  col+=alb*(vec3(.062,.05,.044)+(hand?vec3(.04,.032,.028):vec3(0.)))*(.7+.3*n.y);
+  if((m>2.5&&m<3.5)||(m>15.5&&m<16.5))col+=alb*vec3(.11,.075,.05)*(.55+.45*smoothstep(3.5,-3.,p.z));
+  col*=mix(1.,o,.65);
+  float ndv=max(dot(n,-rd),0.);
+  if(m>6.5&&m<7.5){
+    col+=vec3(.9,.22,.1)*lc*pow(1.-ndv,3.)*.55*max(dot(rd,L)*.5+.5,0.);
+    col+=alb*vec3(.9,.72,.55)*.05*(1.-ndv);
+  }
+  if(uFlame>.001){
+    vec3 fw=uHO+uHB*(uLP-AL*.075);
+    vec3 Fv=fw-p;float df=length(Fv);Fv/=df;
+    float fl=.85+.15*noise(vec2(uT*30.,3.));
+    col+=alb*mix(vec3(.5,.62,1.),vec3(1.,.7,.45),.35)*uFlame*fl*.0042/(.004+df*df)*max(dot(n,Fv)*.75+.25,0.);
+  }
+  col+=emi;
+  if(uI>.001){
+    vec2 ou=hand?q.xy*7.:su*1.3;
+    vec2 fl=uI*.15*vec2(sin(ou.y*2.+uT*.4),cos(ou.x*2.-uT*.35));
+    vec3 lcx=lace(ou+fl,uT);
+    float lum=dot(col,vec3(.3,.6,.1));
+    col+=lcx*(.035+lum*1.4)*uI*uI*1.25;
+    col=mix(col,col*(.55+1.3*neon(lum*1.6+uT*.13+ou.x*.21+ou.y*.17)),uI*.42);
+  }
+  return col;
+}
+
+vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
+
+vec3 renderRoom(vec3 rd){
+  float m;float t=march(rd,m);
+  vec3 rdc=rd*uHB;        // ray in body frame
+  vec3 oc=toCam(ro);      // eye in body frame
+  vec3 col;
+  if(m>8.5&&m<9.5){
+    vec3 p=ro+rd*t;vec3 n=calcN(p);
+    float fr=pow(1.-max(dot(n,-rd),0.),3.);
+    gNoGlass=true;
+    float m2;float t2=march(rd,m2);
+    col=shadeHit(ro+rd*t2,rd,m2);
+    gNoGlass=false;
+    vec3 pb=uPB-oc;float b=dot(rdc,pb);float disc=b*b-dot(pb,pb)+.0245*.0245;
+    if(disc>0.&&uVapor>.001){
+      float ch=2.*sqrt(disc)/.049;
+      vec3 pm=rdc*b-pb;
+      vec2 sw=pm.xy*37.+pm.z*21.;
+      float nz=fbm(sw+vec2(uT*.5,-uT*.9)+fbm(sw*.7-uT*.3));
+      float dn=clamp(uVapor*ch*(.7+1.3*nz),0.,.97);
+      vec3 vc=vec3(.6,.6,.57)*(.5+.35*nz)*(.75+uFlame*vec3(.55,.42,.35));
+      col=mix(col,vc,dn);
+    }
+    vec3 rf=reflect(rd,n);
+    vec3 env=vec3(1.,.66,.36)*pow(max(dot(rf,normalize(LAMP-p)),0.),60.)*2.+vec3(.2,.25,.35)*pow(max(rf.y,0.),2.)*.08;
+    if(uFlame>.001){
+      vec3 fcw=uLP-AL*.08;vec3 pc=toCam(p);
+      env+=vec3(.5,.65,1.)*uFlame*pow(max(dot(rf,normalize(uHO+uHB*fcw-p)),0.),24.)*1.5;
+      env+=vec3(1.,.45,.1)*uFlame*exp(-dot(pc-fcw-vec3(0.,.03,0.),pc-fcw-vec3(0.,.03,0.))*900.)*.35;
+    }
+    col=col*vec3(.9,.95,.96)+env+fr*vec3(.22,.21,.2);
+  }else col=shadeHit(ro+rd*t,rd,m);
+
+  if(uFlame>.001){
+    vec3 T0=uLP-AL*.047;
+    float fl=.85+.15*noise(vec2(uT*30.,1.));
+    for(int i=0;i<7;i++){
+      float fi=float(i)/6.;
+      vec3 c=T0-AL*(.004+fi*.042)+vec3(.0015*sin(uT*40.+fi*5.),0.,0.)*fi-oc;
+      float dz=dot(rdc,c);
+      if(dz>0.&&dz<t+.03){
+        float d=length(c-rdc*dz);
+        float w=mix(.0045,.0018,fi);
+        col+=uFlame*fl*(vec3(.75,.85,1.)*exp(-d*d/(w*w))*1.6+vec3(.1,.3,1.)*exp(-d*d/(w*w*9.))*.5+vec3(.15,.2,.6)*exp(-d*d/(w*w*150.))*.05)*(1.-fi*.5);
+      }
+    }
+  }
+  if(uExA>.001){
+    // exhaled cloud: a shell expanding from the mouth, so both eyes agree on where it is
+    float Rf=.3+uExP*.9;
+    vec3 o=oc-vec3(0.,-.07,.05);
+    float bq=dot(o,rdc);
+    float s=-bq+sqrt(max(bq*bq-dot(o,o)+Rf*Rf,0.));
+    vec3 dm=(o+rdc*s)/Rf;
+    vec2 uv=dm.xy/(1.+max(dm.z,-.95))*1.5;
+    vec2 c=vec2(0.,-.6+uExP*.6);
+    float rad=.16+uExP*.95;
+    float d=length((uv-c)*vec2(.75,1.))/rad;
+    float n=fbm(uv*3.+vec2(0.,-uT*.3)+fbm(uv*2.2+uT*.12)*1.3);
+    float dens=smoothstep(1.,.15,d)*n*1.9*uExA*mix(.55,1.,smoothstep(-.1,.15,t-s));
+    vec3 vc=vec3(.2,.18,.165)*(.7+.6*n);
+    vc=mix(vc,vc*(.5+1.2*neon(n*2.+uT*.2)),uI*.6);
+    col=mix(col,vc,clamp(dens,0.,.82));
+  }
+  col=aces(col*1.35);
+  return pow(col,vec3(.4545));
+}
+
+// ---------- closed-eye: chrysanthemum ----------
+// e: view direction in the trip frame (z forward). hp: eye offset in metres.
+// each petal layer sits on its own sphere, so the layers separate in depth.
+vec3 chrys(vec3 e,vec3 hp,float k){
+  float t=uT;
+  vec3 col=vec3(0.);float r0=0.,lr0=0.;
+  for(int i=0;i<5;i++){
+    float fi=float(i);
+    vec3 dd=normalize(e+hp*(.16+.2*fi));
+    vec2 p=dd.xy/(1.0001+dd.z)*1.5;
+    p*=1.+.04*sin(t*.9);
+    float r=length(p),a=atan(p.y,p.x);
+    float lr=log(r+.002);
+    if(i==0){r0=r;lr0=lr;}
+    float n=8.+fi*4.;
+    float dir=mod(fi,2.)<.5?1.:-1.;
+    float aa=a+dir*t*(.06+.03*fi)*(1.+k);
+    float rr=lr*(1.6+fi*.9)-t*(.25+.5*k)*(1.+fi*.2);
+    vec2 g=vec2(aa*n/TAU,rr);
+    float row=floor(g.y);
+    g.x+=.5*row;
+    vec2 f=fract(g)-.5;vec2 id=vec2(mod(floor(g.x),n),row);
+    float pet=length(vec2(f.x*(1.+1.2*(f.y+.5)),f.y));
+    float fill=smoothstep(.5,.44,pet);
+    float rim=smoothstep(.07,0.,abs(pet-.43));
+    float vein=smoothstep(.05,0.,abs(f.x))*fill;
+    float h=hash21(id+fi*13.);
+    vec3 warm=pal(h*.25+fi*.07+t*.03,vec3(.6,.35,.2),vec3(.4,.35,.3),vec3(1.),vec3(0.,.1,.25));
+    vec3 c=mix(warm,neon(h*.5+fi*.17+t*.08+lr*.15),k);
+    float w=1./(1.+fi*.5);
+    col=mix(col,c*(.3+.7*(f.y+.5)),fill*w*.9);
+    col+=c.gbr*rim*w*.8+vec3(1.,.9,.7)*vein*w*.25;
+  }
+  col+=vec3(1.,.85,.6)*.022/(r0*r0*10.+.02)*(.3+k);
+  col*=.8+.3*sin(lr0*18.-t*3.)*k;
+  // wraps the whole sphere: dimmer behind you, fading out at the far pole
+  col*=mix(.62,1.,smoothstep(1.5,.25,r0))*smoothstep(30.,8.,r0);
+  col*=.32+.5*k;
+  return col;
+}
+
+// ---------- breakthrough tunnel: a real cylinder around the viewer ----------
+vec3 tunnel(vec3 e,vec3 hp){
+  float t=uT,k=uTunK;
+  float ra=(t*.15+k*k*2.)*mix(.3,1.,uFlat);
+  e.xy*=rot(ra);hp.xy*=rot(ra);
+  const float RC=1.3;
+  vec2 o=hp.xy;float lo=length(o);if(lo>RC*.7)o*=RC*.7/lo;
+  float A=dot(e.xy,e.xy)+1e-5,B=dot(o,e.xy),C=dot(o,o)-RC*RC;
+  float s=(-B+sqrt(B*B-A*C))/A;
+  vec2 hh=o+e.xy*s;
+  float a=atan(hh.y,hh.x);
+  float r=.75*sqrt(A)/max(abs(e.z),1e-3);
+  float z=.4*(hp.z+e.z*s)/RC+uTunZ*.9;
+  vec2 g=vec2(a/TAU*12.+.4*sin(z*.6+t*.5),z*1.6);
+  vec2 id=vec2(mod(floor(g.x),12.),floor(g.y)),f=fract(g)-.5;
+  float h=hash21(id);
+  float dq=max(abs(f.x),abs(f.y));
+  float dd=abs(abs(f.x)+abs(f.y)-.5);
+  float dc=abs(length(f)-.28);
+  vec3 c=neon(h*.6+z*.04+t*.1);
+  vec3 col=c*smoothstep(.5,.42,dq)*(.25+.5*h)+c.gbr*smoothstep(.07,0.,dd)*1.1+c.brg*smoothstep(.05,0.,dc)*step(.5,h)+vec3(1.)*smoothstep(.05,0.,abs(dq-.47))*.6;
+  vec2 g2=g*4.;vec2 f2=fract(g2)-.5;float h2=hash21(floor(g2)+id*3.);
+  col+=neon(h2+t*.2+z*.1)*smoothstep(.09,0.,abs(abs(f2.x)+abs(f2.y)-.42))*.55*step(.35,h2);
+  col*=.8;
+  col*=smoothstep(0.,.2,r)*(1.+.4/(r*3.+.3));
+  col*=.75+.25*sin(z*3.-t*6.);
+  float rf=e.z>0.?r:1e3;
+  col+=vec3(1.,.95,.85)*(.02+k*k*k*1.3)/(rf*rf*(14.-12.*k)+.02)*.08;
+  return col;
+}
+
+// ---------- hyperspace ----------
+float apollo(vec3 p,float s,out vec4 tr){
+  float sc=1.;tr=vec4(1e3);
+  for(int i=0;i<uQA;i++){
+    p=-1.+2.*fract(.5*p+.5);
+    float r2=dot(p,p);
+    tr=min(tr,vec4(abs(p),r2));
+    float k=s/r2;p*=k;sc*=k;
+  }
+  return .25*abs(p.y)/sc;
+}
+vec2 mapEnt(vec3 q,float ph){
+  float t=uT+ph;
+  q.y-=.025*sin(t*1.3);
+  q.x=abs(q.x);
+  vec3 hp=q-vec3(0.,.215,0.);
+  float head=sdEll(hp,vec3(.082,.1,.085));
+  head=smin(head,sdTaper(hp,vec3(0.,-.04,-.01),vec3(0.,-.14,-.03),.05,.012),.04);
+  float horn=1e3;
+  for(int i=0;i<3;i++){
+    float fi=float(i);
+    float an=.25+fi*.55;
+    vec3 b0=vec3(sin(an)*.06,cos(an)*.08,0.);
+    vec3 b1=vec3(sin(an)*(.2+.03*sin(t*2.+fi)),cos(an)*.24+.02*sin(t*1.7+fi*2.),.02*sin(t+fi));
+    horn=min(horn,sdTaper(hp,b0,b1,.028,.004));
+    horn=min(horn,length(hp-b1)-.014);
+  }
+  float body=sdTaper(q,vec3(0.,.1,0.),vec3(0.,-.42,.05),.065,.006);
+  body=smin(body,sdEll(q-vec3(0.,.02,0.),vec3(.11,.07,.06)),.05);
+  float arm=1e3;
+  for(int i=0;i<3;i++){
+    float fi=float(i);
+    vec3 s0=vec3(.085,.04-fi*.07,0.);
+    vec3 e0=s0+vec3(.15-.03*fi,.05*sin(t*1.1+fi*2.)-.03*fi,-.05-.03*fi);
+    vec3 h0=e0+vec3(-.07+.06*sin(t*.8+fi*1.7),.13*cos(t*.6+fi*2.3)*(1.-fi*.4)+.05-.09*fi,-.15);
+    arm=min(arm,sdCapsule(q,s0,e0,.016));
+    arm=smin(arm,sdTaper(q,e0,h0,.014,.009),.01);
+    arm=smin(arm,length(q-h0)-.022,.012);
+  }
+  float d=smin(smin(head,horn,.025),smin(body,arm,.03),.03);
+  d+=.004*sin(q.x*55.+t*3.)*sin(q.y*55.-t*2.)*sin(q.z*55.+t);
+  vec2 r=vec2(d*.8,1.);
+  vec3 ep=hp-vec3(.036,.012,-.074);ep.xy*=rot(.35);
+  r=U(r,vec2(sdEll(ep,vec3(.027,.014,.012)),2.));
+  // the offered object
+  vec3 op=q-vec3(0.,-.07+.015*sin(t*2.),-.2);
+  op.xz*=rot(t*1.3);op.xy*=rot(t*.9);
+  float oc=(abs(op.x)+abs(op.y)+abs(op.z)-.035-.008*sin(t*5.))*.577;
+  r=U(r,vec2(oc,3.));
+  return r;
+}
+vec2 mapEnts(vec3 q){
+  float zc=.95+(1.-uEnt)*3.5;
+  vec3 c=q-vec3(0.,-.02,zc);
+  float lc=length(c);
+  vec2 r=lc>.75?vec2(lc-.58,0.):mapEnt(c,0.);
+  vec3 c2=vec3(abs(q.x)-.66,q.y+.03,q.z-zc-.5)/.7;
+  float l2=length(c2);
+  vec2 r2=l2>.75?vec2(l2-.58,0.):mapEnt(c2,2.3);
+  r2.x*=.7;
+  return U(r,r2);
+}
+// e, hp as in chrys. one unit of the fractal is one metre, so it has real stereo depth
+// and the entities stand about a metre in front of you.
+vec3 hyper(vec3 e,vec3 hp){
+  float t=uT;
+  if(uPeak>.001){
+    // kaleidoscope: fold direction and eye offset together so each wedge stays a rigid mirror image
+    float seg=TAU/8.;
+    float aa=atan(e.y,e.x)+t*.04;
+    float ce=floor(aa/seg)*seg+seg*.5;
+    float al=aa-ce,af=abs(al),rp=length(e.xy);
+    float ph=t*.04-ce,c=cos(ph),s=sin(ph);
+    vec2 hf=vec2(c*hp.x-s*hp.y,s*hp.x+c*hp.y);
+    if(al<0.)hf.y=-hf.y;
+    float w=uPeak*.85;
+    e=normalize(mix(e,vec3(rp*cos(af),rp*sin(af),e.z),w));
+    hp.xy=mix(hp.xy,hf,w);
+  }
+  float ang=acos(clamp(e.z,-1.,1.));
+  float r=.75*ang;
+  float foc=mix(1.1,.75,uPeak);
+  vec3 ec=normalize(vec3(e.xy*mix(1.,.75/foc,uFlat),e.z));
+  float ct=t*.25;
+  vec3 hro=vec3(2.8*cos(.1+.33*ct),.4+.3*cos(.37*ct),2.8*cos(.5+.35*ct));
+  vec3 ta=vec3(1.9*cos(1.2+.41*ct),.4+.1*cos(.27*ct),1.9*cos(2.+.38*ct));
+  float roll=.3*cos(.1*ct)*mix(.35,1.,uFlat);
+  vec3 cw=normalize(ta-hro),cp=vec3(sin(roll),cos(roll),0.),cx=normalize(cross(cw,cp)),cy=normalize(cross(cx,cw));
+  vec3 rd=ec.x*cx+ec.y*cy+ec.z*cw;
+  hro+=hp.x*cx+hp.y*cy+hp.z*cw;
+  float s=1.1+.5*smoothstep(-.3,.3,cos(.1*t))+.07*uPeak*sin(t*.9);
+  float tt=.02,glow=0.,m=0.,d=1.;vec4 tr=vec4(1.);
+  bool ents=uEnt>.002;
+  for(int i=0;i<uQH;i++){
+    vec3 p=hro+rd*tt;
+    d=apollo(p,s,tr);m=0.;
+    if(ents){
+      vec3 q=hp+ec*tt;
+      d=max(d,.95*uEnt-length(q-vec3(0.,0.,.55)));
+      vec2 en=mapEnts(q);
+      if(en.x<d){d=en.x;m=en.y;}
+    }
+    glow+=exp(-d*50.);
+    if(d<uQE*tt||tt>14.)break;
+    tt+=d;
+  }
+  glow*=84./float(uQH);
+  vec3 p=hro+rd*tt;vec3 col;
+  if(m>.5){
+    vec3 q=hp+ec*tt;
+    vec2 ee=vec2(.0015,0.);
+    vec3 n=normalize(vec3(mapEnts(q+ee.xyy).x-mapEnts(q-ee.xyy).x,mapEnts(q+ee.yxy).x-mapEnts(q-ee.yxy).x,mapEnts(q+ee.yyx).x-mapEnts(q-ee.yyx).x));
+    float ndv=max(dot(n,-ec),0.);
+    vec3 base=neon(q.y*1.6+abs(q.x)*.8+t*.15);
+    vec3 pat=lace(vec2(abs(q.x),q.y)*7.+q.z*2.,t*1.5);
+    col=base*(.15+.6*ndv)+pat*.7+vec3(.6,.9,1.)*pow(1.-ndv,2.5)*.9;
+    if(m>1.5)col=vec3(1.,.93,.62)*2.*(.35+.65*ndv);
+    if(m>2.5)col=(neon(t*.4+ndv*1.5)+vec3(.7))*1.5;
+  }else{
+    vec4 tq;vec2 ee=vec2(.0012*tt+.0004,0.);
+    vec3 n=normalize(vec3(apollo(p+ee.xyy,s,tq)-apollo(p-ee.xyy,s,tq),apollo(p+ee.yxy,s,tq)-apollo(p-ee.yxy,s,tq),apollo(p+ee.yyx,s,tq)-apollo(p-ee.yyx,s,tq)));
+    float ao=pow(clamp(tr.w*2.,0.,1.),1.3);
+    vec3 jw=pal(tr.w*.9+tr.y*.7+t*.04,vec3(.42,.3,.5),vec3(.42,.34,.45),vec3(1.,1.,1.),vec3(.0,.35,.62));
+    vec3 base=mix(jw,neon(tr.x*1.3+.5-t*.06),smoothstep(.25,.7,tr.z)*.6);
+    vec3 ld=normalize(vec3(.5,.8,.3));
+    float dif=max(dot(n,ld),0.)*.7+.35*max(dot(n,-rd),0.);
+    col=base*(dif+.12)*ao;
+    // inlaid filigree following the orbit traps
+    float f1=smoothstep(.05,0.,abs(fract(tr.x*9.)-.5)-.4);
+    float f2=smoothstep(.05,0.,abs(fract(tr.z*7.+tr.y*5.)-.5)-.41);
+    float f3=smoothstep(.04,0.,abs(fract(tr.w*14.)-.5)-.43);
+    col=mix(col,vec3(1.,.78,.3)*(dif+.3),clamp(f1+f3,0.,1.)*.75*ao);
+    col=mix(col,vec3(.1,.9,.85)*(dif+.3),f2*.55*ao);
+    float band=smoothstep(.07,0.,abs(fract(tr.w*5.-t*.35)-.5)-.38);
+    col+=neon(tr.w*3.+t*.2)*band*1.1*ao;
+    col+=vec3(1.,.95,.9)*pow(max(dot(reflect(rd,n),ld),0.),24.)*.6*ao;
+  }
+  float fog=1.-exp(-.05*tt*tt);
+  vec3 fc=neon(t*.03+.62)*.1+vec3(.03,0.,.09);
+  col=mix(col,fc,fog);
+  col+=neon(t*.07+r*.5+glow*.01)*glow*.0035;
+  col+=vec3(1.,.96,.9)*uPeak*.16*exp(-r*r*14.)*(.6+.4*sin(t*3.));
+  col*=1.-.35*uFlat*smoothstep(.4,1.1,length(gUV));
+  col*=1.25;
+  col=col/(1.+dot(col,vec3(.3333))*.55);
+  return pow(clamp(col,0.,1.),vec3(.85));
+}
+
+void main(){
+  vec2 fc=gl_FragCoord.xy;
+  vec2 b=fc/uRes*2.-1.;
+  vec2 nd=b*(1.-uFov)+uFov*b*b*b;          // foveation: more pixels in the middle
+  vec3 vd=vec3(nd*uProj.xy+uProj.zw,-1.);  // view-space ray
+  vec2 uv=vd.xy*.75;gUV=uv;
+  vec3 vdn=normalize(vd);
+  vec3 col=vec3(0.);
+  if(uTripW<.999){
+    vec3 rd=uVR*vdn;
+    // breathing: a slow warp tied to the room, not to the head
+    float wk=mix(.7,1.,uFlat);
+    rd+=uI*.02*wk*vec3(sin(rd.y*5.+uT*1.1)+.5*sin(rd.y*13.-uT*1.7),cos(rd.x*4.+uT*.9)+.5*cos(rd.x*11.+uT*1.3),sin(rd.x*6.-uT*1.2)+.5*cos(rd.y*9.+uT*.8));
+    rd+=uI*uI*.004*wk*vec3(sin(rd.y*70.+uT*9.),cos(rd.x*70.-uT*8.),sin(rd.z*70.+uT*7.));
+    rd=normalize(rd);
+    ro=uEye;
+    col=renderRoom(rd);
+    float lk=mix(1.6,.78,uFlat);
+    float o=1.-uLid;
+    float hh=o*lk*(1.-.3*min(uv.x*uv.x,1.));
+    col*=1.-smoothstep(hh-.2*lk,hh,abs(uv.y-.03));
+    col*=1.-.25*uInh*min(dot(uv,uv),1.);
+  }
+  if(uTripW>.001){
+    vec3 d=uTR*vdn;
+    vec3 e=vec3(d.xy,-d.z),hp=vec3(uTP.xy,-uTP.z);
+    vec3 tc=vec3(0.);
+    if(uChrys>.001)tc+=chrys(e,hp,uChrysK)*uChrys;
+    if(uTun>.001)tc+=tunnel(e,hp)*uTun;
+    if(uHyp>.001)tc+=hyper(e,hp)*uHyp;
+    tc+=vec3(1.,.97,.92)*uFlash*mix(.8,1.,uFlat);
+    col=mix(col,tc,uTripW*uTripW)+tc*uTripW*(1.-uTripW)*.7;
+  }
+  vec2 suv=fc/uRes;
+  vec2 fuv=(suv-uCen)*(1.-uFbZoom)+uCen;
+  vec3 prev=texture(uPrev,fuv).rgb;
+  col=mix(col,max(col,prev),uTrail);
+  O=vec4(clamp(col,0.,1.),1.);
+}
+</script>
+
+<script id="fs-post" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+out vec4 O;
+uniform sampler2D uTex;
+uniform vec2 uRes,uCen;
+uniform vec4 uProj;
+uniform float uFov,uFlat,uCA,uSat,uVig,uBloom;
+void main(){
+  vec2 uv=gl_FragCoord.xy/uRes;vec2 d=uv-uCen;
+  vec3 c=vec3(texture(uTex,uv+d*uCA).r,texture(uTex,uv).g,texture(uTex,uv-d*uCA).b);
+  vec3 b=vec3(0.);
+  for(int i=0;i<8;i++){
+    float a=float(i)*.7854;vec2 o=vec2(cos(a),sin(a))*vec2(uRes.y/uRes.x,1.);
+    b+=texture(uTex,uv+o*.008).rgb+texture(uTex,uv+o*.022).rgb;
+  }
+  b/=16.;b=max(b-.35,0.);c+=b*b*uBloom;
+  float l=dot(c,vec3(.299,.587,.114));c=mix(vec3(l),c,uSat);
+  vec2 q=uv*2.-1.;vec2 v=((q*(1.-uFov)+uFov*q*q*q)*uProj.xy+uProj.zw)*.75;
+  c*=max(1.-uVig*mix(dot(v,v)*.5,dot(uv-.5,uv-.5)*1.6,uFlat),0.);
+  O=vec4(clamp(c,0.,1.),1.);
+}
+</script>
+
+<script id="fs-final" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+out vec4 O;
+uniform sampler2D uTex;
+uniform vec4 uVP;
+uniform vec2 uTx;
+uniform float uFov,uT,uGrain,uFade,uSharp;
+float h(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
+void main(){
+  vec2 px=gl_FragCoord.xy-uVP.xy;
+  vec2 n=px/uVP.zw*2.-1.;
+  vec2 b=n;
+  if(uFov>0.)for(int i=0;i<5;i++)b-=(uFov*b*b*b+(1.-uFov)*b-n)/(3.*uFov*b*b+1.-uFov);
+  vec2 uv=b*.5+.5;
+  vec3 c=texture(uTex,uv).rgb;
+  if(uSharp>0.){
+    vec3 s=texture(uTex,uv+vec2(uTx.x,0.)).rgb+texture(uTex,uv-vec2(uTx.x,0.)).rgb+texture(uTex,uv+vec2(0.,uTx.y)).rgb+texture(uTex,uv-vec2(0.,uTx.y)).rgb;
+    c=clamp(c+(c*4.-s)*uSharp,0.,1.);
+  }
+  c+=(h(px+fract(uT)*61.)-.5)*uGrain;
+  O=vec4(clamp(c,0.,1.)*uFade,1.);
+}
+</script>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const errEl = $('err');
+const fail = msg => { errEl.textContent += msg + '\n'; document.title = 'ERR'; };
+window.addEventListener('error', e => fail(e.message));
+
+const params = new URLSearchParams(location.search);
+const SHOT = params.has('t');
+const SBS = params.has('sbs');
+const DUR = 310;
+const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
+
+// ---------- GL ----------
+const canvas = $('c');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, powerPreference: 'high-performance', xrCompatible: true });
+if (!gl) { fail('WebGL2 is required.'); return; }
+
+const VS = `#version 300 es
+void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.-1.,0.,1.);}`;
+const VSQ = `#version 300 es
+uniform vec4 uC[4];out vec2 v;
+void main(){v=vec2(float(gl_VertexID&1),float(gl_VertexID>>1));gl_Position=uC[gl_VertexID];}`;
+const FSQ = `#version 300 es
+precision mediump float;uniform sampler2D uTex;uniform float uA;in vec2 v;out vec4 O;
+void main(){O=texture(uTex,v)*uA;}`;
+const compile = (type, src) => {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) fail(gl.getShaderInfoLog(s));
+  return s;
+};
+const program = (vs, fs) => {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) fail(gl.getProgramInfoLog(p) || 'link failed');
+  const cache = {};
+  return { p, loc: n => (n in cache ? cache[n] : (cache[n] = gl.getUniformLocation(p, n))) };
+};
+const src = id => $(id).textContent.trim();
+const scene = program(VS, src('fs-scene'));
+const post = program(VS, src('fs-post'));
+const fin = program(VS, src('fs-final'));
+const quad = program(VSQ, FSQ);
+gl.bindVertexArray(gl.createVertexArray());
+
+const mkTarget = (w, h) => {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  return { tex, fb, w, h };
+};
+const rmTarget = t => { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); };
+// one set of buffers per eye: two for the feedback trail, one for the graded image
+const eyes = [{ W: 0, H: 0, cur: 0 }, { W: 0, H: 0, cur: 0 }];
+const sizeEye = (e, w, h) => {
+  if (e.W === w && e.H === h) return;
+  const old = e.f;
+  e.W = w; e.H = h;
+  e.f = [mkTarget(w, h), mkTarget(w, h)];
+  if (e.p) rmTarget(e.p);
+  e.p = mkTarget(w, h);
+  if (old) { // carry the trail across a resolution change
+    const a = old[1 - e.cur], bT = e.f[1 - e.cur];
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, a.fb); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, bT.fb);
+    gl.blitFramebuffer(0, 0, a.w, a.h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    old.forEach(rmTarget);
+  }
+};
+
+// ---------- maths ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const ss = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const lerp = (a, b, t) => a + (b - a) * t;
+const l3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const len = a => Math.hypot(a[0], a[1], a[2]);
+const norm = a => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const pl = (t, k) => {
+  if (t <= k[0][0]) return k[0][1];
+  for (let i = 1; i < k.length; i++) if (t < k[i][0]) {
+    const u = (t - k[i - 1][0]) / (k[i][0] - k[i - 1][0]);
+    return lerp(k[i - 1][1], k[i][1], u * u * (3 - 2 * u));
+  }
+  return k[k.length - 1][1];
+};
+// quaternions [x,y,z,w]
+const QI = [0, 0, 0, 1];
+const qmul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+const qconj = q => [-q[0], -q[1], -q[2], q[3]];
+const qaxis = (x, y, z, a) => { const s = Math.sin(a / 2); return [x * s, y * s, z * s, Math.cos(a / 2)]; };
+const qrot = (q, v) => {
+  const [x, y, z, w] = q;
+  const cx = y * v[2] - z * v[1], cy = z * v[0] - x * v[2], cz = x * v[1] - y * v[0];
+  return [v[0] + 2 * (w * cx + y * cz - z * cy), v[1] + 2 * (w * cy + z * cx - x * cz), v[2] + 2 * (w * cz + x * cy - y * cx)];
+};
+const q2m = q => { // column-major mat3
+  const [x, y, z, w] = q;
+  return [1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w), 2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w), 2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)];
+};
+const qslerp = (a, b, t) => {
+  let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  if (d < 0) { b = b.map(v => -v); d = -d; }
+  let wa = 1 - t, wb = t;
+  if (d < .9995) { const th = Math.acos(d), s = Math.sin(th); wa = Math.sin((1 - t) * th) / s; wb = Math.sin(t * th) / s; }
+  const r = a.map((v, i) => v * wa + b[i] * wb), n = Math.hypot(...r);
+  return r.map(v => v / n);
+};
+const FWD = [0, 0, -1];
+const gaze = q => { const f = qrot(q, FWD); return { yaw: Math.atan2(f[0], -f[2]), pitch: Math.asin(clamp(f[1], -1, 1)), f }; };
+const qYaw = yaw => qaxis(0, 1, 0, -yaw);
+const qYawPitch = (yaw, pitch) => qmul(qYaw(yaw), qaxis(1, 0, 0, pitch));
+const angBetween = (a, b) => { const fa = qrot(a, FWD), fb = qrot(b, FWD); return Math.acos(clamp(fa[0] * fb[0] + fa[1] * fb[1] + fa[2] * fb[2], -1, 1)); };
+
+// ---------- timeline ----------
+const HITS = [7, 24, 41];
+const AL = [.3271, -.9346, -.1402];
+const REST = { M: [-.2, -.7, .22], B: [-.12, -.6, .4] };
+const HEAT = { M: [-.06, -.2, .24], B: [0, -.09, .44] };
+const MOUTH = { M: [0, -.078, .03], B: [-.012, -.118, .235] };
+const LDOWN = [.3, -.62, .36];
+const WAKE = 237; // eyes still shut: safe moment to re-anchor the room to wherever the head now is
+
+const PHASES = [[0, 'Setting'], [7, 'First hit'], [24, 'Second hit'], [41, 'Third hit'], [55.5, 'Lying back'], [62, 'Chrysanthemum'], [82, 'Breakthrough'], [91, 'Hyperspace'], [118, 'Entities'], [168, 'Peak'], [214, 'Return'], [240, 'Comedown'], [284, 'Afterglow']];
+const CAPS = [
+  [1.5, 'A quiet room. Low light. Nothing to do for the next fifteen minutes.'],
+  [8, 'First inhale. Slow, and held.'],
+  [20, 'Within seconds: colours saturate, edges sharpen. A thin, rising tone in the ears.'],
+  [27, 'Second inhale. The body hums. Surfaces begin to breathe.'],
+  [37.5, 'Geometry crawls over everything. The room feels pressurised.'],
+  [44, 'Third inhale. The hands barely feel like your own.'],
+  [56, 'Lie back. Let go.'],
+  [64, 'Eyes closed: the chrysanthemum. A slow, blooming, rotating mandala.'],
+  [76, 'It spins faster. The tone climbs. Something is about to give.'],
+  [83, 'Breakthrough. Acceleration through the pattern; the body is gone.'],
+  [93, 'Elsewhere. Vaulted, impossible architecture, sharper and more vivid than waking life.'],
+  [108, 'Everything is made of moving, luminous detail. It feels strangely familiar.'],
+  [121, 'Presences. Many people report beings that seem aware, even expectant.'],
+  [140, 'They gesture, shape-shift, hold out objects of impossible intricacy.'],
+  [170, 'Peak. Language and thought fall away. Pure, overwhelming form.'],
+  [200, 'The intensity starts to loosen.'],
+  [217, 'The geometry softens. A body, a breath, a bed, somewhere.'],
+  [242, 'Eyes open. The ceiling is back, still shimmering with residual pattern.'],
+  [264, 'Minute by minute the room settles.'],
+  [286, 'About fifteen minutes have passed. Stillness. Afterglow.'],
+  [302, ''],
+];
+const REAL = [[0, 0], [7, 0], [58, 45], [82, 75], [91, 90], [214, 330], [240, 420], [284, 720], [310, 900]];
+const plLin = (t, k) => { for (let i = 1; i < k.length; i++) if (t < k[i][0]) return lerp(k[i - 1][1], k[i][1], (t - k[i - 1][0]) / (k[i][0] - k[i - 1][0])); return k[k.length - 1][1]; };
+const capAt = t => { let c = ''; for (const [a, s] of CAPS) if (t >= a) c = s; return c; };
+
+// vr: no artificial head sway, the body pitch is all that the timeline drives
+function state(t, vr) {
+  const up = ss(4.5, 7, t) * (1 - ss(55.5, 58, t));
+  let mouth = 0, flame = 0, lup = 0, vapor = 0, inh = 0, exA = 0, exP = 0, hitsDone = 0;
+  for (const t0 of HITS) {
+    mouth += ss(t0 + 6, t0 + 7.5, t) - ss(t0 + 11, t0 + 12.5, t);
+    flame += ss(t0 + 1, t0 + 1.15, t) * (1 - ss(t0 + 5.85, t0 + 6, t));
+    lup += ss(t0, t0 + 1, t) * (1 - ss(t0 + 6, t0 + 7.2, t));
+    vapor += ss(t0 + 1.8, t0 + 6, t) * (1 - ss(t0 + 7.7, t0 + 10.8, t));
+    inh += ss(t0 + 7.5, t0 + 8, t) * (1 - ss(t0 + 10.6, t0 + 11, t));
+    hitsDone += ss(t0 + 1.5, t0 + 6, t);
+    const e = (t - (t0 + 13.2)) / 3.8;
+    if (e > 0 && e < 1) { exP = e; exA = ss(0, .12, e) * (1 - ss(.45, 1, e)); }
+  }
+  const I = pl(t, [[17, 0], [24, .2], [34, .32], [41, .55], [51, .72], [58, 1], [238, 1], [243, .7], [262, .35], [285, .12], [300, 0]]);
+  const trem = .0012 + .011 * I;
+  const tr = [(Math.sin(t * 7.3) + .5 * Math.sin(t * 13.1)) * trem, (Math.sin(t * 6.1 + 1) + .5 * Math.sin(t * 11.7)) * trem, Math.sin(t * 5.3 + 2) * trem];
+  const idle = [.004 * Math.sin(t * .9), .005 * Math.sin(t * .7 + 1), .003 * Math.sin(t * .5)];
+  const steady = 1 - mouth * .7;
+  const off = i => idle[i] + tr[i] * steady;
+  let M = l3(l3(REST.M, HEAT.M, up), MOUTH.M, mouth), B = l3(l3(REST.B, HEAT.B, up), MOUTH.B, mouth);
+  M = M.map((v, i) => v + off(i) * (1 - mouth)); B = B.map((v, i) => v + off(i) * 1.15);
+  const LUP = B.map((v, i) => v + AL[i] * .118);
+  const LP = l3(LDOWN, LUP, lup * up).map((v, i) => v + tr[(i + 1) % 3] * .6 * (1 - lup));
+
+  const lie = ss(55.5, 60.5, t);
+  const cam = l3([0, 1.15, .85], [0, .82, 2.0], lie);
+  let pitch = 1.35 * lie, yaw = 0;
+  let lid = ss(61, 63.5, t) - ss(238, 242, t);
+  if (vr) lid = Math.max(lid, .7 * Math.sin(lie * Math.PI)); // squint while the room tilts: less of it in the periphery
+  else {
+    cam[1] += .004 * Math.sin(t * 1.3) + .03 * Math.sin(lie * Math.PI);
+    pitch = lerp(-.12, 1.35, lie) - .035 * mouth + .012 * Math.sin(t * .6) + I * .02 * Math.sin(t * .8) * (1 - lie);
+    yaw = .3 * Math.sin(t * .85) * (1 - ss(1.5, 5.5, t)) + .01 * Math.sin(t * .4) + I * .025 * Math.sin(t * .53) * (1 - lie);
+  }
+  const tripW = pl(t, [[56, 0], [61, .3], [64, 1], [238, 1], [242, .28], [262, 0]]);
+  const chrysW = pl(t, [[56, 1], [82, 1], [85.5, 0], [212, 0], [230, 1], [262, 1]]);
+  const chrysK = pl(t, [[56, 0], [64, .3], [82, 1], [212, .6], [262, .1]]);
+  const tun = pl(t, [[81, 0], [84, 1], [89.5, 1], [91.5, 0]]);
+  const tunK = clamp((t - 81) / 9.5);
+  const tunZ = (t - 81) + 34 * tunK * tunK * tunK;
+  const hyp = pl(t, [[89, 0], [92, 1], [213, 1], [230, 0]]);
+  const ent = pl(t, [[116, 0], [130, 1], [166, 1], [178, 0]]);
+  const peak = pl(t, [[164, 0], [180, 1], [198, 1], [214, 0]]);
+  const flash = pl(t, [[88.5, 0], [90.3, 1], [94.5, 0]]);
+  const trail = tripW > .99 ? lerp(.4, .55, peak) * (1 - .5 * tun) : .5 * I;
+  const fade = ss(0, 2.5, t) * (1 - ss(302, 309.5, t));
+
+  return {
+    cam, bodyQ: qYawPitch(yaw, pitch),
+    u: {
+      uT: [t], uPM: M, uPB: B, uLP: LP,
+      uHands: [up > .01 ? 1 : 0], uFlame: [flame], uVapor: [vapor], uExA: [exA], uExP: [exP], uInh: [inh],
+      uResin: [1 - .22 * hitsDone], uI: [I], uLid: [lid], uTripW: [tripW], uChrys: [chrysW], uChrysK: [chrysK],
+      uTun: [tun], uTunZ: [tunZ], uTunK: [tunK], uHyp: [hyp], uEnt: [ent], uPeak: [peak], uFlash: [flash],
+      uTrail: [trail], uFbZoom: [.004 * I + .012 * hyp * tripW + .02 * tun],
+    },
+    post: { uCA: [(.0015 + .011 * I * (1 - .5 * hyp)) * (vr ? .6 : 1)], uSat: [1 + .55 * I], uVig: [.9 - .4 * hyp * tripW], uBloom: [.6 + 1.1 * I] },
+    fin: { uT: [t], uFade: [fade], uGrain: [vr ? .02 : .035] },
+    a: { t, flame, inh, exA, I, tripW, chrysW, chrysK, tun, tunK, hyp, ent, peak, flash, lie },
+  };
+}
+
+// ---------- audio ----------
+let ac = null, muted = false; const A = {};
+function initAudio() {
+  if (ac || SHOT) return;
+  try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  const sr = ac.sampleRate;
+  const out = ac.createGain(); out.gain.value = 0; A.out = out;
+  const comp = ac.createDynamicsCompressor(); out.connect(comp); comp.connect(ac.destination);
+  const nb = ac.createBuffer(1, sr * 2, sr); const nd = nb.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  const cb = ac.createBuffer(1, sr * 3, sr); const cd = cb.getChannelData(0);
+  for (let i = 0; i < cd.length; i++) if (Math.random() < .0022) { const a = Math.random(); for (let j = 0; j < 40 && i + j < cd.length; j++) cd[i + j] += (Math.random() * 2 - 1) * a * Math.exp(-j / 7); }
+  A.nb = nb;
+  const mkNoise = (buf, type, f, q) => {
+    const s = ac.createBufferSource(); s.buffer = buf; s.loop = true;
+    const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+    const g = ac.createGain(); g.gain.value = 0;
+    s.connect(fl); fl.connect(g); g.connect(out); s.start();
+    return { f: fl, g };
+  };
+  A.room = mkNoise(nb, 'lowpass', 170, .4);
+  A.torch = mkNoise(nb, 'bandpass', 4600, .5);
+  A.breath = mkNoise(nb, 'bandpass', 900, 1.4);
+  A.crack = mkNoise(cb, 'highpass', 1800, .5);
+  // rising carrier tone with tremolo
+  A.ringG = ac.createGain(); A.ringG.gain.value = 0;
+  const trem = ac.createGain(); trem.gain.value = 1;
+  A.lfo = ac.createOscillator(); A.lfo.frequency.value = 22; A.lfoG = ac.createGain(); A.lfoG.gain.value = 0;
+  A.lfo.connect(A.lfoG); A.lfoG.connect(trem.gain); A.lfo.start();
+  A.ring = [1, 1.498, 2.004].map((m, i) => {
+    const o = ac.createOscillator(); o.type = 'sine'; const g = ac.createGain(); g.gain.value = [.5, .3, .2][i];
+    o.connect(g); g.connect(trem); o.start(); return { o, m };
+  });
+  trem.connect(A.ringG); A.ringG.connect(out);
+  // drone
+  A.droneF = ac.createBiquadFilter(); A.droneF.type = 'lowpass'; A.droneF.Q.value = 5;
+  A.droneG = ac.createGain(); A.droneG.gain.value = 0;
+  [55, 82.4, 110.3, 164.6, 220.4, 277.6].forEach((f, i) => {
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = i % 2 ? 8 : -8;
+    const g = ac.createGain(); g.gain.value = .15; o.connect(g); g.connect(A.droneF); o.start();
+  });
+  A.droneF.connect(A.droneG); A.droneG.connect(out);
+  // shimmer voices through a feedback delay
+  A.shimG = ac.createGain(); A.shimG.gain.value = 0;
+  const dly = ac.createDelay(1); dly.delayTime.value = .31; const fb = ac.createGain(); fb.gain.value = .55;
+  A.shimG.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(out); A.shimG.connect(out);
+  A.shimLfo = [1318.5, 1568, 1760, 2093, 2637, 3136, 3520].map((f, i) => {
+    const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = ac.createGain(); g.gain.value = 0;
+    const l = ac.createOscillator(); l.frequency.value = .13 + .117 * i; const lg = ac.createGain(); lg.gain.value = .07;
+    l.connect(lg); lg.connect(g.gain); o.connect(g); g.connect(A.shimG); o.start(); l.start(); return l;
+  });
+  A.sub = ac.createOscillator(); A.sub.type = 'sine'; A.sub.frequency.value = 42;
+  A.subG = ac.createGain(); A.subG.gain.value = 0; A.sub.connect(A.subG); A.subG.connect(out); A.sub.start();
+}
+let prevFlame = 0;
+function click() {
+  const s = ac.createBufferSource(); s.buffer = A.nb; const g = ac.createGain(); const n = ac.currentTime;
+  g.gain.setValueAtTime(.35, n); g.gain.exponentialRampToValueAtTime(.001, n + .05);
+  const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 2500;
+  s.connect(f); f.connect(g); g.connect(A.out); s.start(n); s.stop(n + .06);
+}
+function audioUpdate(a) {
+  if (!ac) return;
+  const n = ac.currentTime, set = (p, v, tc = .08) => p.setTargetAtTime(v, n, tc);
+  set(A.out.gain, playing && !muted ? .85 : 0, .12);
+  if (!playing) return;
+  const t = a.t;
+  if (a.flame > .2 && prevFlame <= .2) click();
+  prevFlame = a.flame;
+  set(A.room.g.gain, .05 * (1 - a.tripW) + .012);
+  set(A.torch.g.gain, a.flame * .06);
+  set(A.breath.g.gain, a.inh * .12 + a.exA * .11);
+  set(A.breath.f.frequency, a.inh > .01 ? 1300 : 480, .2);
+  const ringAmt = pl(t, [[17, 0], [30, .25], [58, .7], [84, 1], [93, .25], [213, .15], [240, .3], [300, 0]]);
+  const ringF = pl(t, [[17, 2600], [58, 3600], [88, 6400], [95, 4200], [240, 3200], [300, 2600]]);
+  set(A.ringG.gain, ringAmt * .03);
+  A.ring.forEach(r => set(r.o.frequency, ringF * r.m, .3));
+  set(A.lfoG.gain, .6 * a.I);
+  set(A.lfo.frequency, 14 + 26 * pl(t, [[17, 0], [88, 1], [95, .3], [300, 0]]), .3);
+  set(A.crack.g.gain, pl(t, [[20, 0], [45, .05], [80, .16], [90, .22], [96, .03], [213, .03], [240, 0]]));
+  set(A.subG.gain, a.tun * .45 + a.flash * .3 + a.peak * .12);
+  set(A.sub.frequency, 38 + 30 * a.tunK, .3);
+  const come = pl(t, [[213, 0], [235, 1], [285, .6], [305, 0]]);
+  set(A.droneG.gain, a.hyp * .16 + come * .04 + a.chrysW * a.chrysK * a.tripW * .05, .3);
+  set(A.droneF.frequency, 260 + 1700 * (.5 + .5 * Math.sin(t * .31)) * a.hyp + 2600 * a.peak + 200 * come, .3);
+  set(A.shimG.gain, a.hyp * (.25 + .3 * a.ent + .4 * a.peak) + come * .15, .3);
+  A.shimLfo.forEach((l, i) => set(l.frequency, (.13 + .117 * i) * (1 + 5 * a.peak + 2 * a.ent), .5));
+}
+
+// ---------- pose ----------
+// Z: where "sitting on the bed, facing the room" is in tracking space. trip: the frame the
+// closed-eye visuals hang in. Both are identity on a flat screen.
+const Z = { mode: null, p: [0, 0, 0], q: QI };
+const trip = { p: [0, 0, 0], q: QI, off: 0, rc: false };
+let headSm = [0, 0, 0];
+const look = { yaw: 0, pitch: 0 }; // drag-to-look on a flat screen
+if (params.has('look')) { const [y, p] = params.get('look').split(',').map(Number); look.yaw = (y || 0) * Math.PI / 180; look.pitch = (p || 0) * Math.PI / 180; }
+const flatPose = () => { Z.mode = null; Z.p = [0, 0, 0]; Z.q = QI; trip.p = [0, 0, 0]; trip.q = QI; trip.rc = false; trip.off = 0; headSm = [0, 0, 0]; };
+
+function rezero(mode, hp, hq) {
+  const g = gaze(hq);
+  // upright: keep the horizon level. lying down already: take the head as it is.
+  if (mode === 'wake') Z.q = Math.abs(g.pitch) < 1 ? qYawPitch(g.yaw, g.pitch) : hq;
+  else Z.q = Math.abs(g.pitch) < .6 ? qYaw(g.yaw) : hq;
+  if (Z.mode === null) { trip.q = Z.q; trip.p = hp; trip.rc = false; trip.off = 0; }
+  Z.mode = mode; Z.p = hp; headSm = hp;
+}
+// the visuals stay put when you glance around, but drift back in front of you if you settle
+// into a new posture (sitting up, lying down, turning over)
+function followTrip(hp, hq, dt) {
+  const ang = angBetween(trip.q, hq), dist = len(sub(hp, trip.p));
+  if (!trip.rc) {
+    trip.off = ang > .75 || dist > .4 ? trip.off + dt : 0;
+    if (trip.off > 4) trip.rc = true;
+  } else {
+    const f = 1 - Math.exp(-dt / .9);
+    trip.q = qslerp(trip.q, hq, f);
+    trip.p = l3(trip.p, hp, f);
+    if (ang < .06 && dist < .04) { trip.rc = false; trip.off = 0; }
+  }
+}
+
+// everything a view needs: where the eye is in the room, and in the trip frame
+function buildView(s, qView, pEye, proj, fov) {
+  const Bq = qmul(s.bodyQ, qconj(Z.q));
+  const Tq = qconj(trip.q);
+  const n0 = [-proj[2] / proj[0], -proj[3] / proj[1]];
+  const cen = n0.map(n => { let b = n; if (fov > 0) for (let i = 0; i < 6; i++) b -= (fov * b * b * b + (1 - fov) * b - n) / (3 * fov * b * b + 1 - fov); return b * .5 + .5; });
+  return {
+    proj, cen,
+    eye: add(s.cam, qrot(Bq, sub(pEye, Z.p))),
+    VR: q2m(qmul(Bq, qView)),
+    TR: q2m(qmul(Tq, qView)),
+    TP: qrot(Tq, sub(pEye, trip.p)),
+  };
+}
+
+const QUAL = {
+  hi: { uQM: 110, uQS: 22, uQH: 84, uQA: 8, uQE: .0007 },
+  lo: { uQM: 76, uQS: 12, uQH: 58, uQA: 6, uQE: .0015 },
+};
+const setU = (prog, u) => { for (const k in u) { const v = u[k], l = prog.loc(k); if (!l) continue; v.length === 1 ? gl.uniform1f(l, v[0]) : gl.uniform3f(l, v[0], v[1], v[2]); } };
+// per-frame uniforms, shared by every view
+function beginFrame(s, vr, fov) {
+  const q = QUAL[params.get('q') || (vr ? 'lo' : 'hi')] || QUAL.hi;
+  const Bq = qmul(s.bodyQ, qconj(Z.q));
+  gl.useProgram(scene.p);
+  setU(scene, s.u);
+  gl.uniform1i(scene.loc('uPrev'), 0);
+  gl.uniform1f(scene.loc('uFov'), fov);
+  gl.uniform1f(scene.loc('uFlat'), vr ? 0 : 1);
+  for (const k of ['uQM', 'uQS', 'uQH', 'uQA']) gl.uniform1i(scene.loc(k), q[k]);
+  gl.uniform1f(scene.loc('uQE'), q.uQE);
+  gl.uniform3fv(scene.loc('uHO'), add(s.cam, qrot(Bq, sub(headSm, Z.p))));
+  gl.uniformMatrix3fv(scene.loc('uHB'), false, [...qrot(s.bodyQ, [1, 0, 0]), ...qrot(s.bodyQ, [0, 1, 0]), ...qrot(s.bodyQ, FWD)]);
+  gl.useProgram(post.p);
+  setU(post, s.post);
+  gl.uniform1i(post.loc('uTex'), 0);
+  gl.uniform1f(post.loc('uFov'), fov);
+  gl.uniform1f(post.loc('uFlat'), vr ? 0 : 1);
+  gl.useProgram(fin.p);
+  setU(fin, s.fin);
+  gl.uniform1i(fin.loc('uTex'), 0);
+  gl.uniform1f(fin.loc('uFov'), fov);
+  gl.disable(gl.BLEND);
+  gl.activeTexture(gl.TEXTURE0);
+}
+// scene -> grade -> un-warp and upscale into dest
+function renderView(e, v, dest) {
+  gl.viewport(0, 0, e.W, e.H);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, e.f[e.cur].fb);
+  gl.useProgram(scene.p);
+  gl.bindTexture(gl.TEXTURE_2D, e.f[1 - e.cur].tex);
+  gl.uniform2f(scene.loc('uRes'), e.W, e.H);
+  gl.uniform2f(scene.loc('uCen'), v.cen[0], v.cen[1]);
+  gl.uniform4fv(scene.loc('uProj'), v.proj);
+  gl.uniform3fv(scene.loc('uEye'), v.eye);
+  gl.uniform3fv(scene.loc('uTP'), v.TP);
+  gl.uniformMatrix3fv(scene.loc('uVR'), false, v.VR);
+  gl.uniformMatrix3fv(scene.loc('uTR'), false, v.TR);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, e.p.fb);
+  gl.useProgram(post.p);
+  gl.bindTexture(gl.TEXTURE_2D, e.f[e.cur].tex);
+  gl.uniform2f(post.loc('uRes'), e.W, e.H);
+  gl.uniform2f(post.loc('uCen'), v.cen[0], v.cen[1]);
+  gl.uniform4fv(post.loc('uProj'), v.proj);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fb);
+  gl.viewport(dest.x, dest.y, dest.w, dest.h);
+  gl.useProgram(fin.p);
+  gl.bindTexture(gl.TEXTURE_2D, e.p.tex);
+  gl.uniform4f(fin.loc('uVP'), dest.x, dest.y, dest.w, dest.h);
+  gl.uniform2f(fin.loc('uTx'), 1 / e.W, 1 / e.H);
+  gl.uniform1f(fin.loc('uSharp'), dest.w > e.W * 1.25 ? .22 : 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  e.cur = 1 - e.cur;
+}
+
+// ---------- flat screen ----------
+let W = 0, H = 0, budget = 800000, drawnKey = '', still = 0;
+function drawFlat(s) {
+  const cw = canvas.clientWidth || 640, ch = canvas.clientHeight || 360;
+  const key = [T, look.yaw, look.pitch, cw, ch, budget].join();
+  still = key === drawnKey ? still + 1 : 0; drawnKey = key;
+  if (still > 8 && !SHOT) return; // paused and unchanged: the trail has settled, nothing new to show
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const sc = Math.min(1, Math.sqrt(budget / (cw * ch * dpr * dpr)));
+  const nv = SBS ? 2 : 1;
+  const w = Math.max(2, Math.round(cw * dpr * sc / nv)) * nv, h = Math.max(2, Math.round(ch * dpr * sc));
+  if (w !== W || h !== H) { W = w; H = h; canvas.width = W; canvas.height = H; }
+  const fov = num('fov', 0), ew = W / nv;
+  const qView = qYawPitch(look.yaw, look.pitch);
+  beginFrame(s, params.has('vrmode'), fov);
+  for (let i = 0; i < nv; i++) {
+    sizeEye(eyes[i], ew, H);
+    const pEye = SBS ? qrot(qView, [i ? .032 : -.032, 0, 0]) : [0, 0, 0];
+    renderView(eyes[i], buildView(s, qView, pEye, [2 / 3 * ew / H, 2 / 3, 0, 0], fov), { fb: null, x: i * ew, y: 0, w: ew, h: H });
+  }
+}
+
+// ---------- WebXR ----------
+let xr = null, xrRef = null, xrBudget = 200000;
+const XR_FOV = num('fov', .5), XR_MIN = 60000, XR_SOFT = 130000, XR_MAX = 800000;
+const xa = { acc: 0, n: 0, cool: 3, wait: 3, minDt: 1 / 90 };
+let stick = false;
+
+// caption card: text drawn to a 2D canvas, shown on a quad that trails the head
+const capCv = document.createElement('canvas'); capCv.width = 1024; capCv.height = 208;
+const capCx = capCv.getContext('2d');
+const capTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, capTex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+const xc = { shown: null, a: 0, d: [0, 0, -1], up: [0, 1, 0] };
+function drawCap(text) {
+  const [main, hint] = text.split('\n');
+  capCx.clearRect(0, 0, 1024, 208);
+  capCx.textAlign = 'center'; capCx.textBaseline = 'middle';
+  capCx.shadowColor = '#000'; capCx.shadowBlur = 14;
+  capCx.font = '500 38px ui-sans-serif, system-ui, sans-serif';
+  const lines = []; let cur = '';
+  for (const w of main.split(' ')) { const t = cur ? cur + ' ' + w : w; if (capCx.measureText(t).width > 960 && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur);
+  const y0 = (hint ? 80 : 104) - (lines.length - 1) * 25;
+  capCx.fillStyle = 'rgba(255,250,240,.95)';
+  for (let k = 0; k < 2; k++) lines.forEach((l, i) => capCx.fillText(l, 512, y0 + i * 50));
+  if (hint) { capCx.font = '400 24px ui-sans-serif, system-ui, sans-serif'; capCx.fillStyle = 'rgba(255,250,240,.6)'; capCx.fillText(hint, 512, 178); }
+  gl.bindTexture(gl.TEXTURE_2D, capTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, capCv);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+}
+const HINT = 'Trigger or pinch: pause  ·  Grip: recentre  ·  Thumbstick: skip';
+function xrCaption() {
+  if (ended) return 'The end.\nTrigger or pinch to replay';
+  if (!playing) return 'Paused\nTrigger or pinch to resume';
+  if (!captions) return '';
+  const c = capAt(T);
+  return c && T < 7.5 ? c + '\n' + HINT : c;
+}
+const mul4 = (m, v) => [0, 1, 2, 3].map(i => m[i] * v[0] + m[4 + i] * v[1] + m[8 + i] * v[2] + m[12 + i]);
+
+function drawXR(xf, s, dt) {
+  const layer = xr.renderState.baseLayer;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  const pose = xf.getViewerPose(xrRef);
+  if (!pose) return;
+  const P = p => [p.x, p.y, p.z], Q = o => [o.x, o.y, o.z, o.w];
+  const hp = P(pose.transform.position), hq = Q(pose.transform.orientation);
+  const want = T >= WAKE ? 'wake' : 'start';
+  if (Z.mode !== want) rezero(want, hp, hq);
+  followTrip(hp, hq, dt);
+  headSm = l3(headSm, hp, 1 - Math.exp(-dt / .12));
+
+  // thumbstick: skip back and forward
+  let sx = 0;
+  for (const src of xr.inputSources) { const ax = src.gamepad?.axes; if (ax) { const v = ax.length > 2 ? ax[2] : ax[0]; if (Math.abs(v || 0) > Math.abs(sx)) sx = v; } }
+  if (Math.abs(sx) > .7 && !stick) { stick = true; T = clamp(T + Math.sign(sx) * 10, 0, DUR - 1); ended = false; }
+  else if (Math.abs(sx) < .3) stick = false;
+
+  beginFrame(s, true, XR_FOV);
+  const drawn = [];
+  pose.views.slice(0, 2).forEach((view, i) => {
+    const vp = layer.getViewport(view);
+    if (!vp || !vp.width || !vp.height) return;
+    const asp = vp.width / vp.height;
+    sizeEye(eyes[i], Math.min(vp.width, Math.round(Math.sqrt(xrBudget * asp) / 2) * 2), Math.min(vp.height, Math.round(Math.sqrt(xrBudget / asp) / 2) * 2));
+    const pm = view.projectionMatrix;
+    const v = buildView(s, Q(view.transform.orientation), P(view.transform.position), [1 / pm[0], 1 / pm[5], pm[8] / pm[0], pm[9] / pm[5]], XR_FOV);
+    renderView(eyes[i], v, { fb: layer.framebuffer, x: vp.x, y: vp.y, w: vp.width, h: vp.height });
+    drawn.push({ view, vp });
+  });
+
+  // captions
+  const want2 = xrCaption();
+  if (want2 !== xc.shown) { xc.a -= dt * 2.5; if (xc.a <= 0) { xc.a = 0; xc.shown = want2; if (want2) drawCap(want2); } }
+  else if (xc.shown) xc.a = Math.min(1, xc.a + dt * 1.6);
+  // the card trails the gaze, stays upright relative to the head, and sits nearer than the entities
+  const hf = qrot(hq, FWD), hu = qrot(hq, [0, 1, 0]);
+  if (xc.snap) { xc.snap = false; xc.d = hf; xc.up = hu; }
+  const ca = Math.acos(clamp(xc.d[0] * hf[0] + xc.d[1] * hf[1] + xc.d[2] * hf[2], -1, 1));
+  if (ca > .3) xc.d = norm(l3(xc.d, hf, Math.min(1, (ca - .3) / ca * dt / .35)));
+  xc.up = norm(l3(xc.up, hu, 1 - Math.exp(-dt / .3)));
+  if (xc.shown && xc.a > 0) {
+    const f = xc.d, r = norm(cross(f, xc.up)), u = cross(r, f);
+    const c = [0, 1, 2].map(i => hp[i] + f[i] * .85 + u[i] * .24);
+    gl.useProgram(quad.p);
+    gl.bindTexture(gl.TEXTURE_2D, capTex);
+    gl.uniform1i(quad.loc('uTex'), 0);
+    gl.uniform1f(quad.loc('uA'), xc.a * s.fin.uFade[0] + (playing ? 0 : xc.a * (1 - s.fin.uFade[0])));
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    for (const { view, vp } of drawn) {
+      const V = view.transform.inverse.matrix, Pm = view.projectionMatrix, cs = [];
+      for (let k = 0; k < 4; k++) {
+        const sxk = (k & 1 ? 1 : -1) * .35, syk = (k >> 1 ? 1 : -1) * .0711;
+        cs.push(...mul4(Pm, mul4(V, [c[0] + r[0] * sxk + u[0] * syk, c[1] + r[1] * sxk + u[1] * syk, c[2] + r[2] * sxk + u[2] * syk])));
+      }
+      gl.viewport(vp.x, vp.y, vp.width, vp.height);
+      gl.uniform4fv(quad.loc('uC[0]'), cs);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    gl.disable(gl.BLEND);
+  }
+}
+// hold the display's frame rate first; below a floor resolution, accept half rate (the
+// headset reprojects head turns) rather than go blurrier
+function xrAdapt(rawDt) {
+  if (rawDt > .25) return;
+  xa.minDt = Math.max(1 / 125, Math.min(xa.minDt, rawDt));
+  xa.acc += rawDt; xa.n++;
+  if (xa.n < 36) return;
+  const avg = xa.acc / xa.n; xa.acc = 0; xa.n = 0;
+  const tgt = xr.frameRate ? 1 / xr.frameRate : xa.minDt;
+  if (avg > tgt * 1.18) {
+    if (xrBudget > XR_MIN && (xrBudget > XR_SOFT || avg > tgt * 2.3)) {
+      xrBudget = Math.max(XR_MIN, xrBudget * .8);
+      xa.wait = Math.min(40, xa.wait * 1.6); xa.cool = xa.wait;
+    }
+  } else if (--xa.cool <= 0 && xrBudget < XR_MAX) { xrBudget = Math.min(XR_MAX, xrBudget * 1.12); xa.cool = 2; }
+}
+async function enterVR() {
+  if (xr) return;
+  initAudio(); // inside the click, so sound is allowed to start
+  let session;
+  try { session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] }); }
+  catch (e) { $('xrnote').textContent = 'Could not start VR: ' + e.message; return; }
+  try {
+    await gl.makeXRCompatible();
+    session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl, { antialias: false, depth: false, stencil: false, alpha: false }) });
+    xrRef = await session.requestReferenceSpace('local');
+  } catch (e) { session.end(); $('xrnote').textContent = 'Could not start VR: ' + e.message; return; }
+  try { if (session.supportedFrameRates?.includes(72)) session.updateTargetFrameRate(72).catch(() => {}); } catch (e) {}
+  session.addEventListener('select', () => {
+    if (ended) { T = 0; ended = false; Z.mode = null; setPlaying(true); } else setPlaying(!playing);
+  });
+  session.addEventListener('squeeze', () => { Z.mode = null; });
+  session.addEventListener('visibilitychange', () => { if (session.visibilityState === 'hidden') setPlaying(false); });
+  session.addEventListener('end', () => {
+    xr = null; xrRef = null; flatPose();
+    setPlaying(false);
+    $('go').textContent = 'Continue here'; $('govr').textContent = ended ? 'Replay in VR' : 'Continue in VR';
+    start.classList.remove('gone');
+    restart();
+  });
+  xr = session;
+  Z.mode = null; xc.shown = null; xc.a = 0; xc.snap = true;
+  if (T >= DUR - .5) { T = 0; ended = false; }
+  start.classList.add('gone');
+  setPlaying(true);
+  restart();
+}
+
+// ---------- UI ----------
+let T = SHOT ? parseFloat(params.get('t')) || 0 : 0;
+let playing = false, captions = true, ended = false, lastMove = performance.now();
+const hud = $('hud'), bar = $('bar'), fill = $('fill'), cap = $('cap'), start = $('start');
+PHASES.slice(1).forEach(([t]) => { const d = document.createElement('div'); d.className = 'tick'; d.style.left = (t / DUR * 100) + '%'; bar.appendChild(d); });
+const setPlaying = v => { playing = v; $('play').textContent = v ? '❚❚' : '▶'; if (v && ac && ac.state === 'suspended') ac.resume(); };
+const begin = () => { initAudio(); if (T >= DUR - .5) { T = 0; ended = false; } start.classList.add('gone'); setPlaying(true); };
+$('go').onclick = begin;
+$('govr').onclick = enterVR;
+$('vr').onclick = enterVR;
+$('play').onclick = () => { if (!start.classList.contains('gone')) begin(); else setPlaying(!playing); };
+$('cc').onclick = () => { captions = !captions; $('cc').classList.toggle('off', !captions); };
+$('mute').onclick = () => { muted = !muted; $('mute').classList.toggle('off', muted); };
+const stage = $('stage');
+const toggleFs = () => { document.fullscreenElement ? document.exitFullscreen() : stage.requestFullscreen?.().catch(() => {}); };
+$('fs').onclick = toggleFs;
+const seekTo = x => { const r = bar.getBoundingClientRect(); T = clamp((x - r.left) / r.width) * DUR; };
+let dragging = false, looking = null;
+bar.addEventListener('pointerdown', e => { dragging = true; bar.setPointerCapture(e.pointerId); seekTo(e.clientX); });
+bar.addEventListener('pointermove', e => { if (dragging) seekTo(e.clientX); });
+bar.addEventListener('pointerup', () => { dragging = false; });
+canvas.addEventListener('pointerdown', e => { looking = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); canvas.classList.add('drag'); });
+canvas.addEventListener('pointermove', e => {
+  if (!looking) return;
+  const k = 1.25 / (canvas.clientHeight || 600);
+  look.yaw -= (e.clientX - looking[0]) * k; look.pitch = clamp(look.pitch + (e.clientY - looking[1]) * k, -1.5, 1.5);
+  looking = [e.clientX, e.clientY];
+});
+const endLook = () => { looking = null; canvas.classList.remove('drag'); };
+canvas.addEventListener('pointerup', endLook); canvas.addEventListener('pointercancel', endLook);
+canvas.addEventListener('dblclick', () => { look.yaw = 0; look.pitch = 0; });
+addEventListener('pointermove', () => { lastMove = performance.now(); });
+addEventListener('keydown', e => {
+  lastMove = performance.now();
+  if (e.code === 'Space') { e.preventDefault(); $('play').onclick(); }
+  else if (e.code === 'ArrowRight') T = clamp(T + 5, 0, DUR);
+  else if (e.code === 'ArrowLeft') T = clamp(T - 5, 0, DUR);
+  else if (e.key === 'r' || e.key === 'R') { look.yaw = 0; look.pitch = 0; }
+  else if (e.key === 'f' || e.key === 'F') toggleFs();
+  else if (e.key === 'm' || e.key === 'M') $('mute').onclick();
+  else if (e.key === 'c' || e.key === 'C') $('cc').onclick();
+});
+if (SHOT) { start.classList.add('gone'); if (params.has('shot')) hud.style.display = 'none'; }
+
+const note = $('xrnote');
+if (navigator.xr?.isSessionSupported) {
+  navigator.xr.isSessionSupported('immersive-vr').then(ok => {
+    if (ok) { $('govr').hidden = false; $('vr').hidden = false; note.textContent = ''; }
+    else note.textContent = 'No headset found on this device. Open this page in your headset\'s browser (Quest, Pico, Vision Pro) to enter VR.';
+  }).catch(() => {});
+} else note.textContent = 'This browser has no WebXR. Open this page in your headset\'s browser (Quest, Pico, Vision Pro) to enter VR.';
+
+const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+let capText = null;
+function uiUpdate(now) {
+  fill.style.width = (T / DUR * 100) + '%';
+  let ph = PHASES[0][1]; for (const [t, n] of PHASES) if (T >= t) ph = n;
+  $('phase').textContent = ph;
+  $('clock').textContent = 'T+ ' + fmt(plLin(T, REAL)) + ' real';
+  let c = capAt(T);
+  if (!captions || !start.classList.contains('gone')) c = '';
+  if (c !== capText) {
+    capText = c; cap.classList.remove('on');
+    if (c) setTimeout(() => { if (capText === c) { cap.textContent = c; cap.classList.add('on'); } }, SHOT ? 0 : 500);
+  }
+  hud.classList.toggle('hide', playing && now - lastMove > 2600 && !dragging);
+}
+
+// ---------- loop ----------
+let last = performance.now(), acc = 0, accN = 0, frames = 0, chain = 0;
+function tick(now, xf) {
+  const inXR = !!(xr && xf);
+  const rawDt = (now - last) / 1000, dt = clamp(rawDt, 0, .1); last = now;
+  if (playing && !dragging) {
+    T += dt;
+    if (T >= DUR) {
+      T = DUR; ended = true; setPlaying(false);
+      if (!inXR) { $('go').textContent = 'Replay'; start.classList.remove('gone'); }
+    }
+    if (inXR) xrAdapt(rawDt);
+    else {
+      acc += dt; accN++;
+      if (accN >= 40) {
+        const avg = acc / accN; acc = 0; accN = 0;
+        if (avg > .03 && budget > 220000) budget *= .78;
+        else if (avg < .0175 && budget < 1300000) budget *= 1.12;
+      }
+    }
+  }
+  const s = state(T, inXR || params.has('vrmode'));
+  if (inXR) drawXR(xf, s, dt); else if (!xr) drawFlat(s);
+  audioUpdate(s.a);
+  uiUpdate(now);
+  frames++;
+  if (SHOT && frames === 3 && document.title !== 'ERR') document.title = 'READY';
+}
+// one loop at a time, on whichever clock is live: the window's or the headset's
+function restart() {
+  const c = ++chain; last = performance.now();
+  const cb = (now, xf) => { if (c !== chain) return; tick(now, xf); (xr || window).requestAnimationFrame(cb); };
+  (xr || window).requestAnimationFrame(cb);
+}
+restart();
+window.__thr = { get T() { return T; }, set T(v) { T = v; }, get xrBudget() { return xrBudget; }, eyes, look };
+})();
+</script>
+</body>
+</html>
